@@ -73,51 +73,16 @@ if (-not (Test-Path $global:WorkingDir)) {
     Write-Host "[V] Working Directory: $global:WorkingDir" -ForegroundColor Green
 }
 
+# 4. Load Dynamic Menu from "FFmpeg-Functions" Folder
+$functionsDir = Join-Path $PSScriptRoot "FFmpeg-Functions"
 
-# ==============================================================================
-# 4. LOAD DYNAMIC MENU (SUPPORT REMOTE IRM & LOCAL)
-# ==============================================================================
-
-# Khai báo cấu hình Repository GitHub của bạn (Cần thay đúng thông tin này)
-$githubUser = "trungtdv4"     # Thay Username GitHub của bạn. Ví dụ: trung-nguyen
-$githubRepo = "Run-FFmpeg-with-your-Wish"           # Thay Tên Repository của bạn. Ví dụ: ffmpeg-wish-tools
-$branch     = "main"
-
-# Định vị thư mục lưu trữ module con tại Local
-$localFunctionsDir = Join-Path $global:WorkingDir "FFmpeg-Functions"
-
-# Nếu chạy qua iex (In-Memory) hoặc máy chưa có folder con local, tải trực tiếp từ GitHub về
-if ([string]::IsNullOrEmpty($PSScriptRoot) -or (-not (Test-Path $localFunctionsDir))) {
-    if (-not (Test-Path $localFunctionsDir)) {
-        New-Item -Path $localFunctionsDir -ItemType Directory | Out-Null
-    }
-
-    # Danh sách các file script con trên GitHub (Thêm tên file vào mảng này khi bạn tạo module mới)
-    $remoteModules = @(
-        "Convert-Video-To-Audio.ps1",
-        "Convert-Video-H264.ps1"
-    )
-
-    Write-Host "[+] Syncing function modules from GitHub..." -ForegroundColor Yellow
-    foreach ($moduleName in $remoteModules) {
-        $downloadUrl = "https://raw.githubusercontent.com/$githubUser/$githubRepo/$branch/FFmpeg-Functions/$moduleName"
-        $targetPath  = Join-Path $localFunctionsDir $moduleName
-        
-        try {
-            Invoke-WebRequest -Uri $downloadUrl -OutFile $targetPath -ErrorAction SilentlyContinue
-        } catch {
-            # Bỏ qua nếu file không tồn tại trên remote
-        }
-    }
-} else {
-    # Nếu chạy file Local, ưu tiên dùng thư mục ngay bên cạnh file cha
-    $sideDir = Join-Path $PSScriptRoot "FFmpeg-Functions"
-    if (Test-Path $sideDir) {
-        $localFunctionsDir = $sideDir
+if (-not (Test-Path $functionsDir)) {
+    $functionsDir = Join-Path $global:WorkingDir "FFmpeg-Functions"
+    if (-not (Test-Path $functionsDir)) {
+        New-Item -Path $functionsDir -ItemType Directory | Out-Null
     }
 }
 
-# Vòng lặp hiển thị Menu chính
 while ($true) {
     Write-Host ""
     Write-Host "----------------------------------------------------" -ForegroundColor Cyan
@@ -126,12 +91,11 @@ while ($true) {
     Write-Host "----------------------------------------------------" -ForegroundColor Cyan
     Write-Host "AVAILABLE FFMPEG FUNCTIONS:" -ForegroundColor Cyan
 
-    # Quét tất cả file .ps1 trong thư mục Local
-    $scriptFiles = Get-ChildItem -Path $localFunctionsDir -Filter "*.ps1" | Sort-Object Name
+    $scriptFiles = Get-ChildItem -Path $functionsDir -Filter "*.ps1" | Sort-Object Name
 
     if ($scriptFiles.Count -eq 0) {
-        Write-Host "[!] No function scripts (.ps1) found in: $localFunctionsDir" -ForegroundColor Red
-        Write-Host "    Please ensure your GitHub repository has module files in 'FFmpeg-Functions'." -ForegroundColor DarkGray
+        Write-Host "[!] No function scripts (.ps1) found in: $functionsDir" -ForegroundColor Red
+        Write-Host "    Please add module files into the directory above." -ForegroundColor DarkGray
         Write-Host ""
         Write-Host "  0. Exit" -ForegroundColor Gray
     } else {
@@ -155,7 +119,6 @@ while ($true) {
         Write-Host ""
         Write-Host ">>> Executing: $($scriptFiles[[int]$selection - 1].BaseName) <<<" -ForegroundColor Green
         
-        # Thực thi file script con local
         & $selectedScript
     } else {
         Write-Host "[!] Invalid selection. Please try again!" -ForegroundColor Red
