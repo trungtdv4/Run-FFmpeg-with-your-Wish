@@ -75,20 +75,49 @@ if (-not (Test-Path $global:WorkingDir)) {
 
 
 # ==============================================================================
-# 4. LOAD DYNAMIC MENU FROM GITHUB VIA API OR LOCAL FOLDER
+# 4. LOAD DYNAMIC MENU (SUPPORT REMOTE IRM & LOCAL)
 # ==============================================================================
 
-# Khai báo cấu hình Repo GitHub của bạn
-$githubUser = "trungtdv4"     # Thay Username GitHub của bạn
-$githubRepo = "Run-FFmpeg-with-your-Wish"           # Thay Tên Repository của bạn
+# Khai báo cấu hình Repository GitHub của bạn (Cần thay đúng thông tin này)
+$githubUser = "trungtdv4"     # Thay Username GitHub của bạn. Ví dụ: trung-nguyen
+$githubRepo = "Run-FFmpeg-with-your-Wish"           # Thay Tên Repository của bạn. Ví dụ: ffmpeg-wish-tools
 $branch     = "main"
 
-# Thư mục lưu file con ở Local
+# Định vị thư mục lưu trữ module con tại Local
 $localFunctionsDir = Join-Path $global:WorkingDir "FFmpeg-Functions"
-if (-not (Test-Path $localFunctionsDir)) {
-    New-Item -Path $localFunctionsDir -ItemType Directory | Out-Null
+
+# Nếu chạy qua iex (In-Memory) hoặc máy chưa có folder con local, tải trực tiếp từ GitHub về
+if ([string]::IsNullOrEmpty($PSScriptRoot) -or (-not (Test-Path $localFunctionsDir))) {
+    if (-not (Test-Path $localFunctionsDir)) {
+        New-Item -Path $localFunctionsDir -ItemType Directory | Out-Null
+    }
+
+    # Danh sách các file script con trên GitHub (Thêm tên file vào mảng này khi bạn tạo module mới)
+    $remoteModules = @(
+        "Convert-Video-To-Audio.ps1",
+        "Convert-Video-H264.ps1"
+    )
+
+    Write-Host "[+] Syncing function modules from GitHub..." -ForegroundColor Yellow
+    foreach ($moduleName in $remoteModules) {
+        $downloadUrl = "https://raw.githubusercontent.com/$githubUser/$githubRepo/$branch/FFmpeg-Functions/$moduleName"
+        $targetPath  = Join-Path $localFunctionsDir $moduleName
+        
+        try {
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $targetPath -ErrorAction SilentlyContinue
+        } catch {
+            # Bỏ qua nếu file không tồn tại trên remote
+        }
+    }
+} else {
+    # Nếu chạy file Local, ưu tiên dùng thư mục ngay bên cạnh file cha
+    $sideDir = Join-Path $PSScriptRoot "FFmpeg-Functions"
+    if (Test-Path $sideDir) {
+        $localFunctionsDir = $sideDir
+    }
 }
 
+# Vòng lặp hiển thị Menu chính
 while ($true) {
     Write-Host ""
     Write-Host "----------------------------------------------------" -ForegroundColor Cyan
@@ -97,36 +126,18 @@ while ($true) {
     Write-Host "----------------------------------------------------" -ForegroundColor Cyan
     Write-Host "AVAILABLE FFMPEG FUNCTIONS:" -ForegroundColor Cyan
 
-    # 1. Kiểm tra xem script đang chạy qua iex hay chạy file Local
-    $functionFiles = @()
+    # Quét tất cả file .ps1 trong thư mục Local
+    $scriptFiles = Get-ChildItem -Path $localFunctionsDir -Filter "*.ps1" | Sort-Object Name
 
-    if ([string]::IsNullOrEmpty($PSScriptRoot)) {
-        # Đang chạy qua irm | iex -> Dùng GitHub API để lấy danh sách file con từ xa
-        $apiUrl = "https://api.github.com/repos/$githubUser/$githubRepo/contents/FFmpeg-Functions?ref=$branch"
-        
-        try {
-            $apiResponse = Invoke-RestMethod -Uri $apiUrl -Method Get -ErrorAction Stop
-            $functionFiles = $apiResponse | Where-Object { $_.name -like "*.ps1" } | Sort-Object name
-        } catch {
-            Write-Host "[!] Could not fetch functions from GitHub API. Checking local cache..." -ForegroundColor Yellow
-            $functionFiles = Get-ChildItem -Path $localFunctionsDir -Filter "*.ps1" | Sort-Object Name
-        }
-    } else {
-        # Đang chạy Local file -> Quét thư mục kế bên file cha
-        $localDir = Join-Path $PSScriptRoot "FFmpeg-Functions"
-        if (Test-Path $localDir) {
-            $functionFiles = Get-ChildItem -Path $localDir -Filter "*.ps1" | Sort-Object Name
-        }
-    }
-
-    # 2. Hiển thị Menu
-    if ($functionFiles.Count -eq 0) {
-        Write-Host "[!] No function scripts found!" -ForegroundColor Red
+    if ($scriptFiles.Count -eq 0) {
+        Write-Host "[!] No function scripts (.ps1) found in: $localFunctionsDir" -ForegroundColor Red
+        Write-Host "    Please ensure your GitHub repository has module files in 'FFmpeg-Functions'." -ForegroundColor DarkGray
+        Write-Host ""
         Write-Host "  0. Exit" -ForegroundColor Gray
     } else {
-        for ($i = 0; $i -lt $functionFiles.Count; $i++) {
-            $displayName = if ($functionFiles[$i].name) { $functionFiles[$i].name -replace '\.ps1$', '' } else { $functionFiles[$i].BaseName }
-            Write-Host "  $($i + 1). $displayName" -ForegroundColor White
+        for ($i = 0; $i -lt $scriptFiles.Count; $i++) {
+            $menuName = $scriptFiles[$i].BaseName
+            Write-Host "  $($i + 1). $menuName" -ForegroundColor White
         }
         Write-Host "  0. Exit" -ForegroundColor Gray
     }
@@ -139,24 +150,13 @@ while ($true) {
         break
     }
 
-    if ($selection -match '^\d+$' -and [int]$selection -le $functionFiles.Count -and [int]$selection -gt 0) {
-        $selectedItem = $functionFiles[[int]$selection - 1]
+    if ($selection -match '^\d+$' -and [int]$selection -le $scriptFiles.Count -and [int]$selection -gt 0) {
+        $selectedScript = $scriptFiles[[int]$selection - 1].FullName
+        Write-Host ""
+        Write-Host ">>> Executing: $($scriptFiles[[int]$selection - 1].BaseName) <<<" -ForegroundColor Green
         
-        # Nếu chạy qua iex, tải code file con về thực thi
-        if ([string]::IsNullOrEmpty($PSScriptRoot)) {
-            $rawUrl = "https://raw.githubusercontent.com/$githubUser/$githubRepo/$branch/FFmpeg-Functions/$($selectedItem.name)"
-            Write-Host ""
-            Write-Host ">>> Fetching and Executing: $($selectedItem.name) <<<" -ForegroundColor Green
-            
-            # Tải nội dung script con và chạy trực tiếp bằng iex
-            $scriptContent = Invoke-RestMethod -Uri $rawUrl
-            Invoke-Expression $scriptContent
-        } else {
-            # Chạy file Local
-            Write-Host ""
-            Write-Host ">>> Executing: $($selectedItem.BaseName) <<<" -ForegroundColor Green
-            & $selectedItem.FullName
-        }
+        # Thực thi file script con local
+        & $selectedScript
     } else {
         Write-Host "[!] Invalid selection. Please try again!" -ForegroundColor Red
     }
