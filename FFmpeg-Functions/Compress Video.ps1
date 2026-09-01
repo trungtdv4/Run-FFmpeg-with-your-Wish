@@ -104,17 +104,17 @@ switch -Wildcard ($videoEncoder) {
         $encoderArgs = "-rc cqp -qp_i $qpVal -qp_p $qpVal -quality quality" 
     }
     "*_nvenc" { 
-        # NVIDIA NVENC: ConstQP=28 (HEVC) / 26 (H264), Slow Preset để tối ưu bitrate
+        # NVIDIA NVENC: ConstQP=28 (HEVC) / 26 (H264), Slow Preset
         $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }
         $encoderArgs = "-rc constqp -qp $qpVal -preset p6" 
     }
     "*_qsv" { 
-        # Intel QuickSync: CQP=28
+        # Intel QuickSync: CQP=28 / 26
         $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }
         $encoderArgs = "-global_quality $qpVal" 
     }
     "libx265" { 
-        # CPU HEVC: CRF=28 - Medium preset giúp nén dung lượng nhỏ nhất mà nét
+        # CPU HEVC: CRF=28
         $encoderArgs = "-crf 28 -preset medium" 
     }
     "libx264" { 
@@ -126,14 +126,30 @@ switch -Wildcard ($videoEncoder) {
     }
 }
 
-# Option hạ Resolution nếu file gốc quá lớn (Ví dụ: 4K -> 1080p)
+# === TÙY CHỌN HẠ RESOLUTION CHO VIDEO LỚN (4K/Large Video) ===
 $scaleFilter = ""
 if ([int]$probeWidth -gt 1920) {
     Write-Host ""
-    $downscale = Read-Host "Original video is above 1080p ($probeWidth x $probeHeight). Downscale to 1080p for massive size reduction? (Y/N, Default is Y)"
-    if ($downscale -ne 'N' -and $downscale -ne 'n') {
-        $scaleFilter = "-vf scale=1920:-2"
-        Write-Host "[i] Resolution will be scaled down to 1080p." -ForegroundColor Yellow
+    Write-Host "[!] Original video resolution is high (${probeWidth}x${probeHeight})." -ForegroundColor Yellow
+    Write-Host "Select Target Resolution:" -ForegroundColor Cyan
+    Write-Host "1. Keep Original Resolution (${probeWidth}x${probeHeight})" -ForegroundColor White
+    Write-Host "2. Downscale to 2K (2560x1440 - High Quality Balance)" -ForegroundColor White
+    Write-Host "3. Downscale to 1080p (1920x1080 - Maximum Size Reduction)" -ForegroundColor White
+
+    $resChoice = Read-Host "Enter choice (1-3, Default is 1)"
+
+    switch ($resChoice) {
+        "2" {
+            $scaleFilter = "-vf scale=2560:-2"
+            Write-Host "[i] Target Resolution: 2K (2560p)" -ForegroundColor Yellow
+        }
+        "3" {
+            $scaleFilter = "-vf scale=1920:-2"
+            Write-Host "[i] Target Resolution: Full HD (1080p)" -ForegroundColor Yellow
+        }
+        Default {
+            Write-Host "[i] Retaining Original Resolution." -ForegroundColor White
+        }
     }
 }
 
