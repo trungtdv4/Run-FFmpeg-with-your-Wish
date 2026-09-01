@@ -104,24 +104,50 @@ if ($segments.Count -gt 1) {
     if ($outChoice -ne "2") { $mergeSegments = $true }
 }
 
-# 5. Select Encoder & Compression Parameters
+# 5. Select Encoder & Quality Profile (ĐÃ BỔ SUNG OPTION GIỮ NGUYÊN CHẤT LƯỢNG)
 Write-Host ""
-Write-Host "Select Output Codec:" -ForegroundColor Cyan
-Write-Host "1. HEVC / H.265 (High Compression - Small File Size)" -ForegroundColor White
-Write-Host "2. H.264 (Standard - Maximum Device Compatibility)" -ForegroundColor White
-$codecChoice = Read-Host "Enter choice (1-2, Default is 1)"
+Write-Host "Select Output Codec & Quality Profile:" -ForegroundColor Cyan
+Write-Host "1. HEVC / H.265 - Balanced (High Compression - Small File Size)" -ForegroundColor White
+Write-Host "2. H.264 - Balanced (Standard Compatibility)" -ForegroundColor White
+Write-Host "3. Visually Lossless / Original Quality (Maximum Clarity - Note: Larger file size)" -ForegroundColor White
 
-$codecType = if ($codecChoice -eq "2") { "h264" } else { "hevc" }
+$qualityChoice = Read-Host "Enter choice (1-3, Default is 1)"
+
+$codecType = "hevc"
+$isLossless = $false
+
+switch ($qualityChoice) {
+    "2" { $codecType = "h264" }
+    "3" { $codecType = "hevc"; $isLossless = $true }
+    Default { $codecType = "hevc" }
+}
+
 $videoEncoder = Get-TargetVideoEncoder -codecType $codecType
 
+# Build Encoder Quality Parameters
 $encoderArgs = ""
-switch -Wildcard ($videoEncoder) {
-    "*_amf"   { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-rc cqp -qp_i $qpVal -qp_p $qpVal -quality quality" }
-    "*_nvenc" { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-rc constqp -qp $qpVal -preset p6" }
-    "*_qsv"   { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-global_quality $qpVal" }
-    "libx265" { $encoderArgs = "-crf 28 -preset medium" }
-    "libx264" { $encoderArgs = "-crf 24 -preset medium" }
-    Default   { $encoderArgs = "-crf 26" }
+
+if ($isLossless) {
+    # Cấu hình giữ nguyên chất lượng hình ảnh sắc nét
+    switch -Wildcard ($videoEncoder) {
+        "*_amf"   { $encoderArgs = "-rc cqp -qp_i 18 -qp_p 18 -quality quality" } # AMD CQP=18
+        "*_nvenc" { $encoderArgs = "-rc constqp -qp 18 -preset p7" }            # NVIDIA CQ=18 (Max Quality)
+        "*_qsv"   { $encoderArgs = "-global_quality 18" }                      # Intel QSV CQP=18
+        "libx265" { $encoderArgs = "-crf 18 -preset slow" }                     # CPU HEVC CRF=18
+        "libx264" { $encoderArgs = "-crf 17 -preset slow" }                     # CPU H264 CRF=17
+        Default   { $encoderArgs = "-crf 18" }
+    }
+    Write-Host "[i] Quality Mode: VISUALLY LOSSLESS (Original Sharpness)" -ForegroundColor Yellow
+} else {
+    # Cấu hình cân bằng dung lượng chuẩn
+    switch -Wildcard ($videoEncoder) {
+        "*_amf"   { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-rc cqp -qp_i $qpVal -qp_p $qpVal -quality quality" }
+        "*_nvenc" { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-rc constqp -qp $qpVal -preset p6" }
+        "*_qsv"   { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-global_quality $qpVal" }
+        "libx265" { $encoderArgs = "-crf 28 -preset medium" }
+        "libx264" { $encoderArgs = "-crf 24 -preset medium" }
+        Default   { $encoderArgs = "-crf 26" }
+    }
 }
 
 # 6. Process Cutting
@@ -140,7 +166,7 @@ for ($idx = 0; $idx -lt $segments.Count; $idx++) {
     $segPath = Join-Path $tempDir $segName
 
     Write-Host " -> Cutting Segment $($idx + 1): $($seg.Start) to $($seg.End)" -ForegroundColor Yellow
-    $ffmpegArgs = "-y -ss $($seg.Start) -to $($seg.End) -i `"$inputPath`" -c:v $videoEncoder $encoderArgs -c:a aac -b:a 128k `"$segPath`""
+    $ffmpegArgs = "-y -ss $($seg.Start) -to $($seg.End) -i `"$inputPath`" -c:v $videoEncoder $encoderArgs -c:a aac -b:a 192k `"$segPath`""
     
     $proc = Start-Process -FilePath "ffmpeg" -ArgumentList $ffmpegArgs -Wait -NoNewWindow -PassThru
     if ($proc.ExitCode -eq 0 -and (Test-Path $segPath)) {
@@ -175,7 +201,6 @@ if ($mergeSegments -and $cutFiles.Count -gt 1) {
         Write-Host "    Saved at: $finalPath" -ForegroundColor White
     }
 } else {
-    # Move files to WorkingDir
     foreach ($file in $cutFiles) {
         $dest = Join-Path $global:WorkingDir (Split-Path $file -Leaf)
         Move-Item -Path $file -Destination $dest -Force
