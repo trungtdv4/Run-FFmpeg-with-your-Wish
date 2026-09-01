@@ -101,8 +101,7 @@ switch ($codecChoice) {
     }
 }
 
-# 5. Build FFmpeg Filter Strings
-# Speed calculation: Video setpts = (1/Speed)*PTS ; Audio atempo = Speed
+# 5. Build FFmpeg Filter Strings & Encoder Quality Control Parameters
 $ptsScale = [math]::Round(1.0 / [float]$speedInput, 4)
 $ptsScaleStr = $ptsScale.ToString("0.0000", [System.Globalization.CultureInfo]::InvariantCulture)
 $speedStr = ([float]$speedInput).ToString("0.00", [System.Globalization.CultureInfo]::InvariantCulture)
@@ -110,6 +109,32 @@ $volumeStr = ([float]$volumeInput).ToString("0.00", [System.Globalization.Cultur
 
 $audioFilter = "atempo=$speedStr,volume=$volumeStr"
 $videoFilter = "setpts=$ptsScaleStr*PTS"
+
+# === ĐOẠN MỚI THÊM: CẤU HÌNH BỘ NÉN CHỐNG PHÌNH DUNG LƯỢNG ===
+$encoderArgs = ""
+if ($isVideo) {
+    switch -Wildcard ($videoEncoder) {
+        "*_amf" { 
+            # Dành cho AMD AMF: Ép chất lượng CQP = 28 để file ra siêu nhẹ
+            $encoderArgs = "-rc cqp -qp_i 28 -qp_p 28 -quality quality" 
+        }
+        "*_nvenc" { 
+            # Dành cho NVIDIA NVENC: Ép CQ = 28
+            $encoderArgs = "-rc constqp -qp 28 -preset p6" 
+        }
+        "*_qsv" { 
+            # Dành cho Intel QuickSync: Ép CQP = 28
+            $encoderArgs = "-global_quality 28" 
+        }
+        "libx26*" { 
+            # Dành cho CPU (libx264 / libx265): Ép CRF = 26
+            $encoderArgs = "-crf 26 -preset fast" 
+        }
+        Default { 
+            $encoderArgs = "-crf 26" 
+        }
+    }
+}
 
 # 6. Execute Processing
 $fileNameWithoutExt = [System.IO.Path]::GetFileNameWithoutExtension($inputName)
@@ -120,8 +145,9 @@ Write-Host ""
 Write-Host "Processing: $inputName -> $outputName ..." -ForegroundColor Green
 Write-Host "[i] Speed: ${speedInput}x | Volume Boost: ${volumeInput}x" -ForegroundColor Yellow
 
+# Đã ghép thêm biến $encoderArgs vào câu lệnh bên dưới
 if ($isVideo) {
-    $ffmpegArgs = "-y -i `"$inputPath`" -vf `"$videoFilter`" -c:v $videoEncoder -af `"$audioFilter`" -c:a $audioCodec `"$outputPath`""
+    $ffmpegArgs = "-y -i `"$inputPath`" -vf `"$videoFilter`" -c:v $videoEncoder $encoderArgs -af `"$audioFilter`" -c:a $audioCodec `"$outputPath`""
 } else {
     $ffmpegArgs = "-y -i `"$inputPath`" -vn -af `"$audioFilter`" -c:a $audioCodec `"$outputPath`""
 }
