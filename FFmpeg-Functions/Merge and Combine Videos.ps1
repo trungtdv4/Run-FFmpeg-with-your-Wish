@@ -175,13 +175,15 @@ $filterComplex = ""
 for ($idx = 0; $idx -lt $inputFiles.Count; $idx++) {
     $inputsCmd += "-i `"$($inputFiles[$idx])`" "
     
-    $filterComplex += "[$idx:v]scale=$targetW\:$targetH\:force_original_aspect_ratio=decrease," +
-                      "pad=$targetW\:$targetH\:(ow-iw)/2\:(oh-ih)/2:black,setsar=1,fps=30[v$idx]; " +
-                      "[$idx:a]aformat=sample_rates=48000:channel_layouts=stereo[a$idx]; "
+    # Bọc ${idx} rõ ràng để PowerShell không hiểu nhầm biến
+    $filterComplex += "[${idx}:v]scale=$targetW\:$targetH\:force_original_aspect_ratio=decrease," +
+                      "pad=$targetW\:$targetH\:(ow-iw)/2\:(oh-ih)/2:black,setsar=1,fps=30[v${idx}]; " +
+                      "[${idx}:a]aformat=sample_rates=48000:channel_layouts=stereo[a${idx}]; "
 }
 
+# Concatenate all streams
 for ($idx = 0; $idx -lt $inputFiles.Count; $idx++) {
-    $filterComplex += "[v$idx][a$idx]"
+    $filterComplex += "[v${idx}][a${idx}]"
 }
 $filterComplex += "concat=n=$($inputFiles.Count):v=1:a=1[outv][outa]"
 
