@@ -104,49 +104,51 @@ if ($segments.Count -gt 1) {
     if ($outChoice -ne "2") { $mergeSegments = $true }
 }
 
-# 5. Select Encoder & Quality Profile (ĐÃ BỔ SUNG OPTION GIỮ NGUYÊN CHẤT LƯỢNG)
+# 5. Select Encoder & Processing Mode
 Write-Host ""
-Write-Host "Select Output Codec & Quality Profile:" -ForegroundColor Cyan
-Write-Host "1. HEVC / H.265 - Balanced (High Compression - Small File Size)" -ForegroundColor White
-Write-Host "2. H.264 - Balanced (Standard Compatibility)" -ForegroundColor White
-Write-Host "3. Visually Lossless / Original Quality (Maximum Clarity - Note: Larger file size)" -ForegroundColor White
+Write-Host "Select Output Processing Mode:" -ForegroundColor Cyan
+Write-Host "1. ULTRA FAST COPY (-c copy: Instant speed, 100% original quality, no re-encode)" -ForegroundColor Green
+Write-Host "   (Note: Cuts at nearest Keyframe. May have 1-2s black screen at start if time is unaligned)" -ForegroundColor DarkGray
+Write-Host "2. HEVC / H.265 - Balanced (Frame-accurate cut, high compression)" -ForegroundColor White
+Write-Host "3. H.264 - Balanced (Frame-accurate cut, maximum compatibility)" -ForegroundColor White
+Write-Host "4. Visually Lossless (Frame-accurate cut, maximum image clarity)" -ForegroundColor White
 
-$qualityChoice = Read-Host "Enter choice (1-3, Default is 1)"
+$qualityChoice = Read-Host "Enter choice (1-4, Default is 1)"
 
+$useStreamCopy = $false
 $codecType = "hevc"
 $isLossless = $false
 
 switch ($qualityChoice) {
-    "2" { $codecType = "h264" }
-    "3" { $codecType = "hevc"; $isLossless = $true }
-    Default { $codecType = "hevc" }
+    "2" { $codecType = "hevc" }
+    "3" { $codecType = "h264" }
+    "4" { $codecType = "hevc"; $isLossless = $true }
+    Default { $useStreamCopy = $true }
 }
 
-$videoEncoder = Get-TargetVideoEncoder -codecType $codecType
+# Bắt buộc chọn phần cứng nếu không dùng Stream Copy
+if (-not $useStreamCopy) {
+    $videoEncoder = Get-TargetVideoEncoder -codecType $codecType
 
-# Build Encoder Quality Parameters
-$encoderArgs = ""
-
-if ($isLossless) {
-    # Cấu hình giữ nguyên chất lượng hình ảnh sắc nét
-    switch -Wildcard ($videoEncoder) {
-        "*_amf"   { $encoderArgs = "-rc cqp -qp_i 18 -qp_p 18 -quality quality" } # AMD CQP=18
-        "*_nvenc" { $encoderArgs = "-rc constqp -qp 18 -preset p7" }            # NVIDIA CQ=18 (Max Quality)
-        "*_qsv"   { $encoderArgs = "-global_quality 18" }                      # Intel QSV CQP=18
-        "libx265" { $encoderArgs = "-crf 18 -preset slow" }                     # CPU HEVC CRF=18
-        "libx264" { $encoderArgs = "-crf 17 -preset slow" }                     # CPU H264 CRF=17
-        Default   { $encoderArgs = "-crf 18" }
-    }
-    Write-Host "[i] Quality Mode: VISUALLY LOSSLESS (Original Sharpness)" -ForegroundColor Yellow
-} else {
-    # Cấu hình cân bằng dung lượng chuẩn
-    switch -Wildcard ($videoEncoder) {
-        "*_amf"   { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-rc cqp -qp_i $qpVal -qp_p $qpVal -quality quality" }
-        "*_nvenc" { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-rc constqp -qp $qpVal -preset p6" }
-        "*_qsv"   { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-global_quality $qpVal" }
-        "libx265" { $encoderArgs = "-crf 28 -preset medium" }
-        "libx264" { $encoderArgs = "-crf 24 -preset medium" }
-        Default   { $encoderArgs = "-crf 26" }
+    $encoderArgs = ""
+    if ($isLossless) {
+        switch -Wildcard ($videoEncoder) {
+            "*_amf"   { $encoderArgs = "-rc cqp -qp_i 18 -qp_p 18 -quality quality" }
+            "*_nvenc" { $encoderArgs = "-rc constqp -qp 18 -preset p7" }
+            "*_qsv"   { $encoderArgs = "-global_quality 18" }
+            "libx265" { $encoderArgs = "-crf 18 -preset slow" }
+            "libx264" { $encoderArgs = "-crf 17 -preset slow" }
+            Default   { $encoderArgs = "-crf 18" }
+        }
+    } else {
+        switch -Wildcard ($videoEncoder) {
+            "*_amf"   { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-rc cqp -qp_i $qpVal -qp_p $qpVal -quality quality" }
+            "*_nvenc" { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-rc constqp -qp $qpVal -preset p6" }
+            "*_qsv"   { $qpVal = if ($codecType -eq "hevc") { "28" } else { "26" }; $encoderArgs = "-global_quality $qpVal" }
+            "libx265" { $encoderArgs = "-crf 28 -preset medium" }
+            "libx264" { $encoderArgs = "-crf 24 -preset medium" }
+            Default   { $encoderArgs = "-crf 26" }
+        }
     }
 }
 
@@ -166,7 +168,14 @@ for ($idx = 0; $idx -lt $segments.Count; $idx++) {
     $segPath = Join-Path $tempDir $segName
 
     Write-Host " -> Cutting Segment $($idx + 1): $($seg.Start) to $($seg.End)" -ForegroundColor Yellow
-    $ffmpegArgs = "-y -ss $($seg.Start) -to $($seg.End) -i `"$inputPath`" -c:v $videoEncoder $encoderArgs -c:a aac -b:a 192k `"$segPath`""
+    
+    if ($useStreamCopy) {
+        # Đặt -ss và -to TRƯỚC -i để Fast Seeking nhảy đến Keyframe chính xác nhất
+        $ffmpegArgs = "-y -ss $($seg.Start) -to $($seg.End) -i `"$inputPath`" -c copy `"$segPath`""
+    } else {
+        # Re-encode chuẩn chính xác từng Frame
+        $ffmpegArgs = "-y -ss $($seg.Start) -to $($seg.End) -i `"$inputPath`" -c:v $videoEncoder $encoderArgs -c:a aac -b:a 192k `"$segPath`""
+    }
     
     $proc = Start-Process -FilePath "ffmpeg" -ArgumentList $ffmpegArgs -Wait -NoNewWindow -PassThru
     if ($proc.ExitCode -eq 0 -and (Test-Path $segPath)) {
