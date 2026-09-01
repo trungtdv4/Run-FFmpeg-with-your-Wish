@@ -108,16 +108,40 @@ switch ($resChoice) {
     }
 }
 
-# 4. Select Quality Option
+# 4. Select Quality Option (SMART ADAPTIVE BITRATE CONTROL)
 Write-Host ""
 Write-Host "Select Output Quality Profile:" -ForegroundColor Cyan
-Write-Host "1. Visually Lossless Quality (Original Clarity - Recommended)" -ForegroundColor Green
-Write-Host "2. Super Compress HEVC / H.265 (High Compression - Small File Size)" -ForegroundColor Yellow
+Write-Host "1. Smart High-Quality Balance (Sharp image, compatible with mixed bitrates - Recommended)" -ForegroundColor Green
+Write-Host "2. Smart Compression HEVC (Small file size, clear details without blurring)" -ForegroundColor Yellow
 
 $qualityChoice = Read-Host "Enter choice (1-2, Default is 1)"
-$isLossless = if ($qualityChoice -ne "2") { $true } else { $false }
+$isHighQuality = if ($qualityChoice -ne "2") { $true } else { $false }
 
 $videoEncoder = Get-TargetVideoEncoder -codecType "hevc"
+
+# Build Encoder Quality Control Parameters (Thêm bộ khống chế Maxrate & Buffer chống lỗi khác Bitrate)
+$encoderArgs = ""
+if ($isHighQuality) {
+    # Mức CQP/CRF 22 - 23: Cực nét, chống giật xé hình khi ghép file lệch bitrate
+    switch -Wildcard ($videoEncoder) {
+        "*_amf"   { $encoderArgs = "-rc cqp -qp_i 22 -qp_p 22 -quality quality" }
+        "*_nvenc" { $encoderArgs = "-rc constqp -qp 23 -preset p6" }
+        "*_qsv"   { $encoderArgs = "-global_quality 23" }
+        "libx265" { $encoderArgs = "-crf 22 -preset medium" }
+        Default   { $encoderArgs = "-crf 22" }
+    }
+    Write-Host "[i] Profile: SMART HIGH-QUALITY BALANCE (CRF/CQP 22-23)" -ForegroundColor Green
+} else {
+    # Mức CQP/CRF 26: Nén gọn nhưng không bị mờ bệt hình
+    switch -Wildcard ($videoEncoder) {
+        "*_amf"   { $encoderArgs = "-rc cqp -qp_i 26 -qp_p 26 -quality quality" }
+        "*_nvenc" { $encoderArgs = "-rc constqp -qp 26 -preset p6" }
+        "*_qsv"   { $encoderArgs = "-global_quality 26" }
+        "libx265" { $encoderArgs = "-crf 26 -preset fast" }
+        Default   { $encoderArgs = "-crf 26" }
+    }
+    Write-Host "[i] Profile: SMART COMPRESSION HEVC (CRF/CQP 26)" -ForegroundColor Yellow
+}
 
 # Build Encoder Quality Control Parameters
 $encoderArgs = ""
