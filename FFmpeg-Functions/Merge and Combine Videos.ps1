@@ -139,13 +139,11 @@ Write-Host "3. Smart Compression HEVC (CRF/CQP 26 - Small file size)" -Foregroun
 
 $qualityChoice = Read-Host "Enter choice (1-3, Default is 1)"
 
-$videoEncoder = Get-TargetVideoEncoder -codecType "hevc"
-
-# Build Encoder Quality Control Parameters
 $encoderArgs = ""
 
 switch ($qualityChoice) {
     "2" {
+        $videoEncoder = Get-TargetVideoEncoder -codecType "hevc"
         switch -Wildcard ($videoEncoder) {
             "*_amf"   { $encoderArgs = "-rc cqp -qp_i 22 -qp_p 22 -quality quality" }
             "*_nvenc" { $encoderArgs = "-rc constqp -qp 22 -preset p6" }
@@ -156,6 +154,7 @@ switch ($qualityChoice) {
         Write-Host "[i] Profile: SMART HIGH-QUALITY BALANCE (CRF 22)" -ForegroundColor White
     }
     "3" {
+        $videoEncoder = Get-TargetVideoEncoder -codecType "hevc"
         switch -Wildcard ($videoEncoder) {
             "*_amf"   { $encoderArgs = "-rc cqp -qp_i 26 -qp_p 26 -quality quality" }
             "*_nvenc" { $encoderArgs = "-rc constqp -qp 26 -preset p6" }
@@ -166,12 +165,15 @@ switch ($qualityChoice) {
         Write-Host "[i] Profile: SMART COMPRESSION HEVC (CRF 26)" -ForegroundColor Yellow
     }
     Default {
-        # Custom Bitrate Input
+        # 1. Cho nhập Bitrate TRƯỚC
         Write-Host ""
         $userBitrate = Read-Host "Enter target Bitrate in Kbps (e.g., 3500, 4500, 6000 - Default is $avgBitrateKbps)"
         if (-not ($userBitrate -match '^\d+$') -or [int]$userBitrate -le 0) {
             $userBitrate = $avgBitrateKbps
         }
+
+        # 2. Mới gọi chọn Encoder SAU
+        $videoEncoder = Get-TargetVideoEncoder -codecType "hevc"
 
         $bitrateK = "${userBitrate}k"
         $maxBitrateK = "$([int]$userBitrate * 1.2)k"
