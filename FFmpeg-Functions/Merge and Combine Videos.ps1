@@ -108,61 +108,54 @@ switch ($resChoice) {
     }
 }
 
-# 4. Select Quality Option (SMART ADAPTIVE BITRATE CONTROL)
+# 4. Select Quality Option (WITH BEST QUALITY OPTION)
 Write-Host ""
 Write-Host "Select Output Quality Profile:" -ForegroundColor Cyan
-Write-Host "1. Smart High-Quality Balance (Sharp image, compatible with mixed bitrates - Recommended)" -ForegroundColor Green
-Write-Host "2. Smart Compression HEVC (Small file size, clear details without blurring)" -ForegroundColor Yellow
+Write-Host "1. Best Quality (Maximum Clarity & Bitrate - Preserves original sharpness)" -ForegroundColor Green
+Write-Host "2. Smart High-Quality Balance (Good quality, moderate file size)" -ForegroundColor White
+Write-Host "3. Smart Compression HEVC (Small file size)" -ForegroundColor Yellow
 
-$qualityChoice = Read-Host "Enter choice (1-2, Default is 1)"
-$isHighQuality = if ($qualityChoice -ne "2") { $true } else { $false }
+$qualityChoice = Read-Host "Enter choice (1-3, Default is 1)"
 
 $videoEncoder = Get-TargetVideoEncoder -codecType "hevc"
 
-# Build Encoder Quality Control Parameters (Thêm bộ khống chế Maxrate & Buffer chống lỗi khác Bitrate)
-$encoderArgs = ""
-if ($isHighQuality) {
-    # Mức CQP/CRF 22 - 23: Cực nét, chống giật xé hình khi ghép file lệch bitrate
-    switch -Wildcard ($videoEncoder) {
-        "*_amf"   { $encoderArgs = "-rc cqp -qp_i 22 -qp_p 22 -quality quality" }
-        "*_nvenc" { $encoderArgs = "-rc constqp -qp 23 -preset p6" }
-        "*_qsv"   { $encoderArgs = "-global_quality 23" }
-        "libx265" { $encoderArgs = "-crf 22 -preset medium" }
-        Default   { $encoderArgs = "-crf 22" }
-    }
-    Write-Host "[i] Profile: SMART HIGH-QUALITY BALANCE (CRF/CQP 22-23)" -ForegroundColor Green
-} else {
-    # Mức CQP/CRF 26: Nén gọn nhưng không bị mờ bệt hình
-    switch -Wildcard ($videoEncoder) {
-        "*_amf"   { $encoderArgs = "-rc cqp -qp_i 26 -qp_p 26 -quality quality" }
-        "*_nvenc" { $encoderArgs = "-rc constqp -qp 26 -preset p6" }
-        "*_qsv"   { $encoderArgs = "-global_quality 26" }
-        "libx265" { $encoderArgs = "-crf 26 -preset fast" }
-        Default   { $encoderArgs = "-crf 26" }
-    }
-    Write-Host "[i] Profile: SMART COMPRESSION HEVC (CRF/CQP 26)" -ForegroundColor Yellow
-}
-
 # Build Encoder Quality Control Parameters
 $encoderArgs = ""
-if ($isLossless) {
-    switch -Wildcard ($videoEncoder) {
-        "*_amf"   { $encoderArgs = "-rc cqp -qp_i 18 -qp_p 18 -quality quality" }
-        "*_nvenc" { $encoderArgs = "-rc constqp -qp 18 -preset p7" }
-        "*_qsv"   { $encoderArgs = "-global_quality 18" }
-        "libx265" { $encoderArgs = "-crf 18 -preset slow" }
-        Default   { $encoderArgs = "-crf 18" }
+
+switch ($qualityChoice) {
+    "2" {
+        # Smart High-Quality Balance (CQP/CRF 22)
+        switch -Wildcard ($videoEncoder) {
+            "*_amf"   { $encoderArgs = "-rc cqp -qp_i 22 -qp_p 22 -quality quality" }
+            "*_nvenc" { $encoderArgs = "-rc constqp -qp 22 -preset p6" }
+            "*_qsv"   { $encoderArgs = "-global_quality 22" }
+            "libx265" { $encoderArgs = "-crf 22 -preset medium" }
+            Default   { $encoderArgs = "-crf 22" }
+        }
+        Write-Host "[i] Profile: SMART HIGH-QUALITY BALANCE (CRF/CQP 22)" -ForegroundColor White
     }
-    Write-Host "[i] Profile: VISUALLY LOSSLESS QUALITY" -ForegroundColor Green
-} else {
-    switch -Wildcard ($videoEncoder) {
-        "*_amf"   { $encoderArgs = "-rc cqp -qp_i 28 -qp_p 28 -quality quality" }
-        "*_nvenc" { $encoderArgs = "-rc constqp -qp 28 -preset p6" }
-        "*_qsv"   { $encoderArgs = "-global_quality 28" }
-        "libx265" { $encoderArgs = "-crf 28 -preset medium" }
-        Default   { $encoderArgs = "-crf 28" }
+    "3" {
+        # Smart Compression (CQP/CRF 26)
+        switch -Wildcard ($videoEncoder) {
+            "*_amf"   { $encoderArgs = "-rc cqp -qp_i 26 -qp_p 26 -quality quality" }
+            "*_nvenc" { $encoderArgs = "-rc constqp -qp 26 -preset p6" }
+            "*_qsv"   { $encoderArgs = "-global_quality 26" }
+            "libx265" { $encoderArgs = "-crf 26 -preset fast" }
+            Default   { $encoderArgs = "-crf 26" }
+        }
+        Write-Host "[i] Profile: SMART COMPRESSION HEVC (CRF/CQP 26)" -ForegroundColor Yellow
     }
-    Write-Host "[i] Profile: SUPER COMPRESS HEVC (H.265)" -ForegroundColor Yellow
+    Default {
+        # BEST QUALITY (Mức nén CQP/CRF 16 - 17 siêu cao + Ép Preset Max Quality)
+        switch -Wildcard ($videoEncoder) {
+            "*_amf"   { $encoderArgs = "-rc cqp -qp_i 16 -qp_p 16 -quality quality -b:v 12M -maxrate 15M" }
+            "*_nvenc" { $encoderArgs = "-rc constqp -qp 17 -preset p7 -b:v 12M -maxrate 15M" }
+            "*_qsv"   { $encoderArgs = "-global_quality 16 -b:v 12M" }
+            "libx265" { $encoderArgs = "-crf 16 -preset slow" }
+            Default   { $encoderArgs = "-crf 16" }
+        }
+        Write-Host "[i] Profile: BEST QUALITY (Maximum Clarity & High Bitrate)" -ForegroundColor Green
+    }
 }
 
 # 5. Build Complex Filter Command (Auto-Scale, Pad Black Bars & Normalize Audio)
