@@ -94,11 +94,31 @@ while ($true) {
         Write-Host "  0. Exit" -ForegroundColor Gray
     }
 
+	# Vòng lặp Menu chính ...
     Write-Host ""
     $selection = Read-Host "Select a function number"
 
     if ($selection -eq '0') {
-        Write-Host "Thank you for using the application!" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "[+] Cleaning up application directory in AppData..." -ForegroundColor Yellow
+        
+        # Định vị thư mục cài đặt AppData
+        $appDataDir = Join-Path $env:LOCALAPPDATA "FFmpeg-Wish-App"
+        
+        # Tự động dọn dẹp thư mục tạm AppData
+        if (Test-Path $appDataDir) {
+            try {
+                # Xóa toàn bộ file tạm đã download
+                Remove-Item -Path $appDataDir -Recurse -Force -ErrorAction SilentlyContinue
+                Write-Host "[V] AppData temporary files cleaned successfully!" -ForegroundColor Green
+            } catch {
+                # Bỏ qua nếu có file đang bị lock
+            }
+        }
+
+        Write-Host ""
+        Write-Host "Thank you for using FFmpeg Wish Execution System! Goodbye." -ForegroundColor Green
+        Start-Sleep -Seconds 1
         break
     }
 

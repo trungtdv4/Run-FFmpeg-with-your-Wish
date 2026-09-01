@@ -59,6 +59,16 @@ if (Test-Path $batPath) {
     
     # Khởi chạy file BAT trong một cửa sổ Terminal mới
     Start-Process -FilePath $batPath -WorkingDirectory $installDir
+	
+	# Nút thoát & Tự động đóng Loader
+    Write-Host ""
+    Write-Host "====================================================" -ForegroundColor Green
+    Write-Host "[V] Setup finished! Main app launched in a new window." -ForegroundColor Green
+    Write-Host "====================================================" -ForegroundColor Green
+    Write-Host ""
+    
+    $null = Read-Host "Press ENTER to exit this Setup Loader window"
+    Exit
 } else {
     Write-Error "[!] Cannot find 'Bootstrapper.bat' in the repository!"
 }
