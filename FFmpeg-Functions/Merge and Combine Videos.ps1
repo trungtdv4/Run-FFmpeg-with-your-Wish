@@ -78,21 +78,37 @@ for ($i = 1; $i -le $videoCount; $i++) {
     }
 }
 
-# 3. Select Target Resolution Standard
+# 3. Select Target Resolution Standard (ĐÃ BỔ SUNG OPTION CUSTOM RESOLUTION)
 Write-Host ""
 Write-Host "Select Output Resolution Standard:" -ForegroundColor Cyan
 Write-Host "1. Full HD 1080p (1920x1080 - Recommended)" -ForegroundColor White
 Write-Host "2. 2K QHD (2560x1440 - Sharper Quality)" -ForegroundColor White
 Write-Host "3. 4K UHD (3840x2160 - Maximum Resolution)" -ForegroundColor White
-$resChoice = Read-Host "Enter choice (1-3, Default is 1)"
+Write-Host "4. Custom Resolution (User Specified Width x Height)" -ForegroundColor Yellow
+$resChoice = Read-Host "Enter choice (1-4, Default is 1)"
 
 $targetW = 1920; $targetH = 1080
 switch ($resChoice) {
     "2" { $targetW = 2560; $targetH = 1440 }
     "3" { $targetW = 3840; $targetH = 2160 }
+    "4" {
+        Write-Host ""
+        $customW = Read-Host "Enter target WIDTH (e.g., 1080, 1280, 2560)"
+        $customH = Read-Host "Enter target HEIGHT (e.g., 1920, 720, 1080)"
+
+        if ($customW -match '^\d+$' -and $customH -match '^\d+$' -and [int]$customW -gt 0 -and [int]$customH -gt 0) {
+            # Đảm bảo Width và Height là số chẵn (yêu cầu bắt buộc của H.264/HEVC)
+            $targetW = [int]$customW - ($customW % 2)
+            $targetH = [int]$customH - ($customH % 2)
+            Write-Host "[V] Custom resolution set: ${targetW}x${targetH}" -ForegroundColor Green
+        } else {
+            Write-Host "[!] Invalid custom values. Fallback to 1920x1080." -ForegroundColor Yellow
+            $targetW = 1920; $targetH = 1080
+        }
+    }
 }
 
-# 4. Select Quality Option (2 OPTIONS ONLY AS REQUESTED)
+# 4. Select Quality Option
 Write-Host ""
 Write-Host "Select Output Quality Profile:" -ForegroundColor Cyan
 Write-Host "1. Visually Lossless Quality (Original Clarity - Recommended)" -ForegroundColor Green
@@ -135,13 +151,11 @@ $filterComplex = ""
 for ($idx = 0; $idx -lt $inputFiles.Count; $idx++) {
     $inputsCmd += "-i `"$($inputFiles[$idx])`" "
     
-    # Filter: Scale video to fit inside target box, then pad black bars around empty space
     $filterComplex += "[$idx:v]scale=$targetW\:$targetH\:force_original_aspect_ratio=decrease," +
                       "pad=$targetW\:$targetH\:(ow-iw)/2\:(oh-ih)/2:black,setsar=1,fps=30[v$idx]; " +
                       "[$idx:a]aformat=sample_rates=48000:channel_layouts=stereo[a$idx]; "
 }
 
-# Concatenate all streams
 for ($idx = 0; $idx -lt $inputFiles.Count; $idx++) {
     $filterComplex += "[v$idx][a$idx]"
 }
