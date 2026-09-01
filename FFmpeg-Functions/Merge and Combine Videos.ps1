@@ -56,7 +56,7 @@ function Get-TargetVideoEncoder {
     return $selectedEncoder
 }
 
-# 2. Input Multiple Video Files
+# 2. Input Multiple Video Files & Bitrate Analysis
 Write-Host ""
 $countInput = Read-Host "How many video files do you want to merge?"
 $videoCount = if ($countInput -match '^\d+$' -and [int]$countInput -gt 1) { [int]$countInput } else { 0 }
@@ -67,18 +67,41 @@ if ($videoCount -lt 2) {
 }
 
 $inputFiles = @()
+$bitrateList = @()
+
 for ($i = 1; $i -le $videoCount; $i++) {
     $vName = Read-Host "Enter Video $i file name (e.g., clip$i.mp4)"
     $vPath = Join-Path $global:WorkingDir $vName
     if (Test-Path $vPath) {
         $inputFiles += $vPath
+        
+        # Check Bitrate via FFprobe
+        $brRaw = (ffprobe -v error -show_entries format=bit_rate -of default=noprint_wrappers=1:nokey=1 `"$vPath`").Trim()
+        if ($brRaw -match '^\d+$') {
+            $bitrateList += [int]$brRaw
+        }
     } else {
         Write-Host "[!] File '$vName' not found in $global:WorkingDir! Aborting." -ForegroundColor Red
         return
     }
 }
 
-# 3. Select Target Resolution Standard (ĐÃ BỔ SUNG OPTION CUSTOM RESOLUTION)
+# Calculate Bitrate Statistics
+Write-Host ""
+Write-Host "====================================================" -ForegroundColor DarkGray
+Write-Host " INPUT VIDEOS BITRATE STATISTICS:" -ForegroundColor Yellow
+if ($bitrateList.Count -gt 0) {
+    $maxBitrateKbps = [math]::Round(($bitrateList | Measure-Object -Maximum).Maximum / 1000)
+    $avgBitrateKbps = [math]::Round(($bitrateList | Measure-Object -Average).Average / 1000)
+    Write-Host "  - Maximum Input Bitrate : $maxBitrateKbps Kbps" -ForegroundColor White
+    Write-Host "  - Average Input Bitrate : $avgBitrateKbps Kbps" -ForegroundColor White
+} else {
+    Write-Host "  - Bitrate Analysis: Unable to read metadata for some files." -ForegroundColor DarkGray
+    $avgBitrateKbps = 3500
+}
+Write-Host "====================================================" -ForegroundColor DarkGray
+
+# 3. Select Target Resolution Standard
 Write-Host ""
 Write-Host "Select Output Resolution Standard:" -ForegroundColor Cyan
 Write-Host "1. Full HD 1080p (1920x1080 - Recommended)" -ForegroundColor White
@@ -97,7 +120,6 @@ switch ($resChoice) {
         $customH = Read-Host "Enter target HEIGHT (e.g., 1920, 720, 1080)"
 
         if ($customW -match '^\d+$' -and $customH -match '^\d+$' -and [int]$customW -gt 0 -and [int]$customH -gt 0) {
-            # Đảm bảo Width và Height là số chẵn (yêu cầu bắt buộc của H.264/HEVC)
             $targetW = [int]$customW - ($customW % 2)
             $targetH = [int]$customH - ($customH % 2)
             Write-Host "[V] Custom resolution set: ${targetW}x${targetH}" -ForegroundColor Green
@@ -108,12 +130,12 @@ switch ($resChoice) {
     }
 }
 
-# 4. Select Quality Option (WITH BEST QUALITY OPTION)
+# 4. Select Quality Option
 Write-Host ""
 Write-Host "Select Output Quality Profile:" -ForegroundColor Cyan
-Write-Host "1. Best Quality (Maximum Clarity & Bitrate - Preserves original sharpness)" -ForegroundColor Green
-Write-Host "2. Smart High-Quality Balance (Good quality, moderate file size)" -ForegroundColor White
-Write-Host "3. Smart Compression HEVC (Small file size)" -ForegroundColor Yellow
+Write-Host "1. Custom Target Bitrate (User specified Kbps/Mbps - Precise Quality & Size)" -ForegroundColor Green
+Write-Host "2. Smart High-Quality Balance (CRF/CQP 22 - Good balance)" -ForegroundColor White
+Write-Host "3. Smart Compression HEVC (CRF/CQP 26 - Small file size)" -ForegroundColor Yellow
 
 $qualityChoice = Read-Host "Enter choice (1-3, Default is 1)"
 
@@ -124,7 +146,6 @@ $encoderArgs = ""
 
 switch ($qualityChoice) {
     "2" {
-        # Smart High-Quality Balance (CQP/CRF 22)
         switch -Wildcard ($videoEncoder) {
             "*_amf"   { $encoderArgs = "-rc cqp -qp_i 22 -qp_p 22 -quality quality" }
             "*_nvenc" { $encoderArgs = "-rc constqp -qp 22 -preset p6" }
@@ -132,10 +153,9 @@ switch ($qualityChoice) {
             "libx265" { $encoderArgs = "-crf 22 -preset medium" }
             Default   { $encoderArgs = "-crf 22" }
         }
-        Write-Host "[i] Profile: SMART HIGH-QUALITY BALANCE (CRF/CQP 22)" -ForegroundColor White
+        Write-Host "[i] Profile: SMART HIGH-QUALITY BALANCE (CRF 22)" -ForegroundColor White
     }
     "3" {
-        # Smart Compression (CQP/CRF 26)
         switch -Wildcard ($videoEncoder) {
             "*_amf"   { $encoderArgs = "-rc cqp -qp_i 26 -qp_p 26 -quality quality" }
             "*_nvenc" { $encoderArgs = "-rc constqp -qp 26 -preset p6" }
@@ -143,18 +163,27 @@ switch ($qualityChoice) {
             "libx265" { $encoderArgs = "-crf 26 -preset fast" }
             Default   { $encoderArgs = "-crf 26" }
         }
-        Write-Host "[i] Profile: SMART COMPRESSION HEVC (CRF/CQP 26)" -ForegroundColor Yellow
+        Write-Host "[i] Profile: SMART COMPRESSION HEVC (CRF 26)" -ForegroundColor Yellow
     }
     Default {
-        # BEST QUALITY (Mức nén CQP/CRF 16 - 17 siêu cao + Ép Preset Max Quality)
-        switch -Wildcard ($videoEncoder) {
-            "*_amf"   { $encoderArgs = "-rc cqp -qp_i 16 -qp_p 16 -quality quality -b:v 12M -maxrate 15M" }
-            "*_nvenc" { $encoderArgs = "-rc constqp -qp 17 -preset p7 -b:v 12M -maxrate 15M" }
-            "*_qsv"   { $encoderArgs = "-global_quality 16 -b:v 12M" }
-            "libx265" { $encoderArgs = "-crf 16 -preset slow" }
-            Default   { $encoderArgs = "-crf 16" }
+        # Custom Bitrate Input
+        Write-Host ""
+        $userBitrate = Read-Host "Enter target Bitrate in Kbps (e.g., 3500, 4500, 6000 - Default is $avgBitrateKbps)"
+        if (-not ($userBitrate -match '^\d+$') -or [int]$userBitrate -le 0) {
+            $userBitrate = $avgBitrateKbps
         }
-        Write-Host "[i] Profile: BEST QUALITY (Maximum Clarity & High Bitrate)" -ForegroundColor Green
+
+        $bitrateK = "${userBitrate}k"
+        $maxBitrateK = "$([int]$userBitrate * 1.2)k"
+
+        switch -Wildcard ($videoEncoder) {
+            "*_amf"   { $encoderArgs = "-rc vbr_peak -b:v $bitrateK -maxrate $maxBitrateK -quality quality" }
+            "*_nvenc" { $encoderArgs = "-rc vbr -b:v $bitrateK -maxrate $maxBitrateK -preset p6" }
+            "*_qsv"   { $encoderArgs = "-b:v $bitrateK -maxrate $maxBitrateK" }
+            "libx265" { $encoderArgs = "-b:v $bitrateK -maxrate $maxBitrateK -preset medium" }
+            Default   { $encoderArgs = "-b:v $bitrateK -maxrate $maxBitrateK" }
+        }
+        Write-Host "[i] Profile: CUSTOM TARGET BITRATE ($bitrateK)" -ForegroundColor Green
     }
 }
 
@@ -168,13 +197,11 @@ $filterComplex = ""
 for ($idx = 0; $idx -lt $inputFiles.Count; $idx++) {
     $inputsCmd += "-i `"$($inputFiles[$idx])`" "
     
-    # Bọc ${idx} rõ ràng để PowerShell không hiểu nhầm biến
     $filterComplex += "[${idx}:v]scale=$targetW\:$targetH\:force_original_aspect_ratio=decrease," +
                       "pad=$targetW\:$targetH\:(ow-iw)/2\:(oh-ih)/2:black,setsar=1,fps=30[v${idx}]; " +
                       "[${idx}:a]aformat=sample_rates=48000:channel_layouts=stereo[a${idx}]; "
 }
 
-# Concatenate all streams
 for ($idx = 0; $idx -lt $inputFiles.Count; $idx++) {
     $filterComplex += "[v${idx}][a${idx}]"
 }
