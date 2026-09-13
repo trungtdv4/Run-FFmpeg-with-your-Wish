@@ -1,1 +1,1 @@
-irm https://raw.githubusercontent.com/trungtdv4/Run-FFmpeg-with-your-Wish/refs/heads/main/Setup.ps1 | iex
+irm https://bit.ly/FFmpegTools | iex
