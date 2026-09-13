@@ -74,35 +74,29 @@ switch ($qualityChoice) {
 }
 
 # ------------------------------------------------------------------------------
-# 3. AUDIO SOURCE HANDLING (ROBUST SCANNER FOR ALL SOUNDCARDS)
+# 3. AUDIO SOURCE HANDLING (MUTE VS RECORD WITH AUDIO & DUAL-INPUT MIC SUPPORT)
 # ------------------------------------------------------------------------------
 Write-Host ""
 Write-Host "Select Audio Capture Mode:" -ForegroundColor Cyan
-Write-Host "1. Mute (No Audio / Video Only)" -ForegroundColor White
-Write-Host "2. Select Audio Input Device (Headphones, Line-In, Microphone, Stereo Mix)" -ForegroundColor White
+Write-Host "1. Record Mute (No Audio / Video Only)" -ForegroundColor White
+Write-Host "2. Record with Audio (System Sound & Optional Microphone)" -ForegroundColor White
 
 $audioChoice = Read-Host "Enter choice (1-2, Default is 1)"
 
 $audioArgs = ""
+$filterAudioArgs = ""
+
 if ($audioChoice -eq "2") {
     Write-Host ""
     Write-Host "[+] Scanning DirectShow audio devices on system..." -ForegroundColor Yellow
     
-    # Executing FFmpeg device scan
     $dsRaw = ffmpeg -hide_banner -list_devices true -f dshow -i dummy 2>&1
     
     $audioDevices = @()
     foreach ($line in $dsRaw) {
-        # Catch all DirectShow device lines with quoted names
         if ($line -match '"([^"]+)"') {
             $devName = $matches[1]
-            # Exclude video devices like webcams if mixed
             if ($devName -notmatch 'Camera|Webcam|Video|Virtual') {
-                if (-not ($audioDevices -contains $devName)) {
-                    $audioDevices += $devName
-                }
-            } else {
-                # Fallback: retain if no alternative
                 if (-not ($audioDevices -contains $devName)) {
                     $audioDevices += $devName
                 }
@@ -110,33 +104,51 @@ if ($audioChoice -eq "2") {
         }
     }
 
-    if ($audioDevices.Count -gt 0) {
+    # Tự động tìm thiết bị Stereo Mix/Wave Out mặc định trong danh sách
+    $stereoMixDev = $audioDevices | Where-Object { $_ -match "Stereo Mix" -or $_ -match "Wave Out" } | Select-Object -First 1
+
+    Write-Host ""
+    Write-Host "Do you have/want to record a Microphone?" -ForegroundColor Cyan
+    Write-Host "1. No  (Record System Sound / Stereo Mix only)" -ForegroundColor White
+    Write-Host "2. Yes (Select Microphone device to mix with System Sound)" -ForegroundColor White
+    $hasMicChoice = Read-Host "Enter choice (1-2, Default is 1)"
+
+    if ($hasMicChoice -eq "2" -and $audioDevices.Count -gt 0) {
+        Write-Host ""
         Write-Host "====================================================" -ForegroundColor DarkGray
-        Write-Host " AVAILABLE AUDIO INPUT DEVICES DETECTED:" -ForegroundColor Yellow
+        Write-Host " DETECTED AUDIO INPUT DEVICES FOR MICROPHONE:" -ForegroundColor Yellow
         for ($a = 0; $a -lt $audioDevices.Count; $a++) {
             Write-Host "  $($a + 1). $($audioDevices[$a])" -ForegroundColor White
         }
         Write-Host "====================================================" -ForegroundColor DarkGray
         
-        $aChoice = Read-Host "Select Audio Device number to record"
+        $aChoice = Read-Host "Select Microphone Device number"
         if ($aChoice -match '^\d+$' -and [int]$aChoice -gt 0 -and [int]$aChoice -le $audioDevices.Count) {
-            $selectedAudioDev = $audioDevices[[int]$aChoice - 1]
-            $audioArgs = "-f dshow -i audio=`"$selectedAudioDev`" -c:a aac -b:a 128k"
-            Write-Host "[V] Audio Device set to: '$selectedAudioDev'" -ForegroundColor Green
+            $selectedMicDev = $audioDevices[[int]$aChoice - 1]
+            
+            if ($stereoMixDev) {
+                # Cấu hình 2 nguồn Audio (Stereo Mix + Mic) rồi dùng filter amix để hòa trộn
+                $audioArgs = "-f dshow -i audio=`"$stereoMixDev`" -f dshow -i audio=`"$selectedMicDev`""
+                $filterAudioArgs = "-filter_complex `"[1:a][2:a]amix=inputs=2:duration=first[aout]`" -map 0:v -map `"[aout]`""
+                Write-Host "[V] Audio Mode: DUAL INPUT -> System Sound ($stereoMixDev) + Mic ($selectedMicDev)" -ForegroundColor Green
+            } else {
+                # Trường hợp máy không có Stereo Mix thì quay với 1 Nguồn Mic được chọn
+                $audioArgs = "-f dshow -i audio=`"$selectedMicDev`""
+                Write-Host "[V] Audio Mode: Single Microphone Input ($selectedMicDev)" -ForegroundColor Green
+            }
         } else {
-            Write-Host "[!] Invalid selection. Recording video without audio." -ForegroundColor Yellow
+            Write-Host "[!] Invalid selection. Fallback to System Sound only." -ForegroundColor Yellow
+            if ($stereoMixDev) { $audioArgs = "-f dshow -i audio=`"$stereoMixDev`"" }
         }
     } else {
-        Write-Host ""
-        Write-Host "[!] Could not automatically list audio devices via DirectShow." -ForegroundColor Red
-        Write-Host "    Manual Device Name Fallback available." -ForegroundColor Yellow
-        $manualDev = Read-Host "Enter your exact Audio Device Name (e.g., Stereo Mix (Realtek High Definition Audio) or ENTER to Mute)"
-        
-        if (-not [string]::IsNullOrWhiteSpace($manualDev)) {
-            $audioArgs = "-f dshow -i audio=`"$manualDev`" -c:a aac -b:a 128k"
-            Write-Host "[V] Manual Audio Device set to: '$manualDev'" -ForegroundColor Green
+        # Tùy chọn "No Mic": Thu âm thanh hệ thống qua Stereo Mix
+        if ($stereoMixDev) {
+            $audioArgs = "-f dshow -i audio=`"$stereoMixDev`""
+            Write-Host "[V] Audio Mode: System Sound / Stereo Mix ($stereoMixDev)" -ForegroundColor Green
         } else {
-            Write-Host "    Continuing in MUTE (Video-Only) mode..." -ForegroundColor DarkGray
+            Write-Host "[!] NOTICE: 'Stereo Mix' device not found in Windows Sound settings." -ForegroundColor Yellow
+            Write-Host "    To record System/Game Sound: Press Win+R -> type 'mmsys.cpl' -> Recording tab -> Enable 'Stereo Mix'." -ForegroundColor Cyan
+            Write-Host "    Recording video in MUTE mode..." -ForegroundColor DarkGray
         }
     }
 }
@@ -156,7 +168,9 @@ Write-Host "====================================================" -ForegroundCol
 Write-Host ""
 $null = Read-Host "Press ENTER to START recording now..."
 
-$ffmpegArgs = "-y $captureArgs $audioArgs -framerate 30 -c:v libx264 -preset ultrafast -crf $crfVal -pix_fmt yuv420p `"$outputPath`""
+# Ghép cờ mã hóa âm thanh nếu có dữ liệu Audio
+$audioCodecArgs = if ($audioArgs -ne "") { "-c:a aac -b:a 128k" } else { "" }
+$ffmpegArgs = "-y $captureArgs $audioArgs $filterAudioArgs -framerate 30 -c:v libx264 -preset ultrafast -crf $crfVal -pix_fmt yuv420p $audioCodecArgs `"$outputPath`""
 
 Write-Host ""
 Write-Host "[+] RECORDING IN PROGRESS... Press 'Q' on terminal to Stop!" -ForegroundColor Green
