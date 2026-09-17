@@ -14,9 +14,11 @@ $zipPath    = Join-Path $env:TEMP "ffmpeg-app.zip"
 $zipUrl     = "https://github.com/$githubUser/$githubRepo/archive/refs/heads/$branch.zip"
 
 Clear-Host
-Write-Host "====================================================" -ForegroundColor Cyan
-Write-Host "      INITIALIZING FFMPEG WISH APP LOADER           " -ForegroundColor Cyan
-Write-Host "====================================================" -ForegroundColor Cyan
+Write-Host "========================================================================================================" -ForegroundColor Cyan
+Write-Host "                                 INITIALIZING FFMPEG WISH APP LOADER                                    " -ForegroundColor Cyan
+Write-Host "  Copyright (c) 2026 Trung Nguyen (12345678+trungnguyen@users.noreply.github.com). All rights reserved. " -ForegroundColor DarkGray
+Write-Host "                      Licensed under the GNU General Public License v3.0 (GPLv3).                       " -ForegroundColor DarkGray
+Write-Host "========================================================================================================" -ForegroundColor Cyan
 Write-Host ""
 
 # 3. Tải Repo Zip từ GitHub

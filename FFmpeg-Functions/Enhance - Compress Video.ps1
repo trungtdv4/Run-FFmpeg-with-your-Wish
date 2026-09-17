@@ -1,10 +1,11 @@
 # Module: Smart-Compress-Video.ps1
 Set-Location $global:WorkingDir
 
-Write-Host "====================================================" -ForegroundColor Cyan
-Write-Host "             SMART VIDEO COMPRESSOR                 " -ForegroundColor Cyan
-Write-Host "  (Analyze Metadata & Optimize Quality/Size)        " -ForegroundColor Cyan
-Write-Host "====================================================" -ForegroundColor Cyan
+Write-Host "========================================================================================================" -ForegroundColor Cyan
+Write-Host "                     SMART VIDEO COMPRESSOR (Analyze Metadata & Optimize Quality/Size)                  " -ForegroundColor Cyan
+Write-Host "  Copyright (c) 2026 Trung Nguyen (12345678+trungnguyen@users.noreply.github.com). All rights reserved. " -ForegroundColor DarkGray
+Write-Host "                      Licensed under the GNU General Public License v3.0 (GPLv3).                       " -ForegroundColor DarkGray
+Write-Host "========================================================================================================" -ForegroundColor Cyan
 
 # 1. Hardware Detection Function
 function Get-TargetVideoEncoder {

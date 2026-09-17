@@ -1,11 +1,12 @@
 # Module: Record-Screen.ps1
-# Author: Designed by trungtdv4@gmail.com. All Rights Reserved.
+# Author: Copyright (c) 2026 Trung Nguyen (12345678+trungnguyen@users.noreply.github.com). All rights reserved.
 Set-Location $global:WorkingDir
 
-Write-Host "====================================================" -ForegroundColor Cyan
-Write-Host "         SMART SCREEN RECORDER (MULTI-MONITOR)      " -ForegroundColor Cyan
-Write-Host "  Designed by trungtdv4@gmail.com. All Rights Reserved. " -ForegroundColor DarkGray
-Write-Host "====================================================" -ForegroundColor Cyan
+Write-Host "========================================================================================================" -ForegroundColor Cyan
+Write-Host "                                SMART SCREEN RECORDER (MULTI-MONITOR)                                   " -ForegroundColor Cyan
+Write-Host "  Copyright (c) 2026 Trung Nguyen (12345678+trungnguyen@users.noreply.github.com). All rights reserved. " -ForegroundColor DarkGray
+Write-Host "                      Licensed under the GNU General Public License v3.0 (GPLv3).                       " -ForegroundColor DarkGray
+Write-Host "========================================================================================================" -ForegroundColor Cyan
 
 # ------------------------------------------------------------------------------
 # 1. SELECT CAPTURE TARGET & DISPLAY MONITOR HANDLING

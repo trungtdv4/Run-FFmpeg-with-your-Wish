@@ -1,10 +1,11 @@
 # Module: Merge-And-Combine-Videos.ps1
 Set-Location $global:WorkingDir
 
-Write-Host "====================================================" -ForegroundColor Cyan
-Write-Host "            MERGE & COMBINE VIDEOS MODULE           " -ForegroundColor Cyan
-Write-Host "   (Auto-Scale, Pad Black Bars & Normalize Audio)   " -ForegroundColor Cyan
-Write-Host "====================================================" -ForegroundColor Cyan
+Write-Host "========================================================================================================" -ForegroundColor Cyan
+Write-Host "            MERGE & COMBINE VIDEOS MODULE (Auto-Scale, Pad Black Bars & Normalize Audio)                " -ForegroundColor Cyan
+Write-Host "  Copyright (c) 2026 Trung Nguyen (12345678+trungnguyen@users.noreply.github.com). All rights reserved. " -ForegroundColor DarkGray
+Write-Host "                      Licensed under the GNU General Public License v3.0 (GPLv3).                       " -ForegroundColor DarkGray
+Write-Host "========================================================================================================" -ForegroundColor Cyan
 
 # 1. Hardware Detection Function
 function Get-TargetVideoEncoder {
